@@ -22,6 +22,7 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "name") // 👈 это нужно!
     private String username;
 
     @Column(unique = true)
@@ -29,4 +30,5 @@ public class User {
 
     private String passwordHash;
 }
+
 
