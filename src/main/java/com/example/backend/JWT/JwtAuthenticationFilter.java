@@ -8,7 +8,6 @@ import org.springframework.security.web.authentication.WebAuthenticationDetailsS
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-import com.example.backend.entiity.User;
 import com.example.backend.repository.UserRepository;
 
 import jakarta.servlet.FilterChain;
@@ -22,7 +21,7 @@ import lombok.RequiredArgsConstructor;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
-    private final UserRepository userRepository; // Твой репозиторий для поиска по email
+    private final UserRepository userRepository;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -30,27 +29,26 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     FilterChain filterChain) throws ServletException, IOException {
 
         final String authHeader = request.getHeader("Authorization");
-        final String jwt;
-        final String userEmail;
 
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        jwt = authHeader.substring(7); // убрать "Bearer "
-        userEmail = jwtService.extractUsername(jwt);
+        final String jwtToken = authHeader.substring(7); // Удаляем "Bearer "
+        final String userEmail = jwtService.extractEmail(jwtToken); // Лучше явно назвать метод
 
         if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            User user = userRepository.findByEmail(userEmail).orElse(null);
-
-            if (user != null && jwtService.isTokenValid(jwt, user.getEmail())) {
-                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                        user, null, null // можно позже добавить роли
-                );
-                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(authToken);
-            }
+            userRepository.findByEmail(userEmail).ifPresent(user -> {
+                if (jwtService.isTokenValid(jwtToken, user.getEmail())) {
+                    // Здесь можно добавить user.getAuthorities(), если реализованы роли
+                    UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                            user, null, null
+                    );
+                    authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(authToken);
+                }
+            });
         }
 
         filterChain.doFilter(request, response);
