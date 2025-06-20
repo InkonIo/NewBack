@@ -19,6 +19,7 @@ public class AuthService {
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     public String register(RegisterRequest request) {
+    try {
         if (userRepository.findByEmail(request.getEmail()).isPresent()) {
             return "User with this email already exists";
         }
@@ -31,7 +32,12 @@ public class AuthService {
 
         userRepository.save(user);
         return "User registered successfully";
+    } catch (Exception e) {
+        e.printStackTrace(); // Покажи в логе причину
+        return "Registration failed: " + e.getMessage();
     }
+}
+
 
     public LoginResponse login(LoginRequest request) {
         User user = userRepository.findByEmail(request.getEmail())
