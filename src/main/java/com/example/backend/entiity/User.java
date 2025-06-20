@@ -22,13 +22,10 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "name") // 👈 это нужно!
-    private String username;
+    private String username; // 👈 теперь маппится на колонку "username"
 
     @Column(unique = true)
     private String email;
 
     private String passwordHash;
 }
-
-
