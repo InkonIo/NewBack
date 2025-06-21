@@ -3,7 +3,7 @@ package com.example.backend.service;
 import com.example.backend.entiity.User;
 import com.example.backend.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -20,7 +20,7 @@ public class PasswordRecoveryService {
     private EmailService emailService;
 
     @Autowired
-    private BCryptPasswordEncoder passwordEncoder;
+    private PasswordEncoder passwordEncoder;
 
     // 1. Отправка кода на email
     public void sendRecoveryCode(String email) {
@@ -31,7 +31,6 @@ public class PasswordRecoveryService {
 
         User user = optionalUser.get();
 
-        // Генерация 6-значного кода
         String code = String.format("%06d", new Random().nextInt(999999));
 
         user.setResetCode(code);
@@ -65,11 +64,9 @@ public class PasswordRecoveryService {
 
         User user = optionalUser.get();
 
-        // Хэшируем новый пароль
         String hashedPassword = passwordEncoder.encode(newPassword);
         user.setPasswordHash(hashedPassword);
 
-        // Сброс кода
         user.setResetCode(null);
         user.setResetCodeExpiry(null);
 

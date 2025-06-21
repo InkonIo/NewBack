@@ -32,7 +32,7 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
             .csrf().disable()
-            .cors().configurationSource(corsConfigurationSource()) // 👈 добавлено
+            .cors().configurationSource(corsConfigurationSource())
             .and()
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(
@@ -56,14 +56,13 @@ public class SecurityConfig {
         return http.build();
     }
 
-    // ✅ CORS для агрофарм домена
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(List.of("https://agrofarm.kz", "https://www.agrofarm.kz"));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
-        config.setAllowCredentials(true); // если работаешь с куки или авторизацией
+        config.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
