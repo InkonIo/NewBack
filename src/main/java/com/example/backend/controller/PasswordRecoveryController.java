@@ -9,21 +9,19 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/v1/auth/recovery") // ✅ Исправленный путь
-@CrossOrigin(origins = "*") // Можно настроить конкретные домены на продакшене
+@RequestMapping("/api/v1/recovery") // ✅ Унифицированный API путь
+@CrossOrigin(origins = "*")
 public class PasswordRecoveryController {
 
     @Autowired
     private PasswordRecoveryService passwordRecoveryService;
 
-    // 1. Отправка кода на email
     @PostMapping("/request")
     public ResponseEntity<String> sendRecoveryCode(@RequestBody RecoveryRequest request) {
         passwordRecoveryService.sendRecoveryCode(request.getEmail());
         return ResponseEntity.ok("Код отправлен на почту");
     }
 
-    // 2. Проверка кода
     @PostMapping("/verify")
     public ResponseEntity<String> verifyCode(@RequestBody CodeVerificationRequest request) {
         boolean isValid = passwordRecoveryService.verifyCode(request.getEmail(), request.getCode());
@@ -34,10 +32,10 @@ public class PasswordRecoveryController {
         }
     }
 
-    // 3. Сброс пароля
     @PostMapping("/reset")
     public ResponseEntity<String> resetPassword(@RequestBody PasswordResetRequest request) {
         passwordRecoveryService.resetPassword(request.getEmail(), request.getNewPassword());
         return ResponseEntity.ok("Пароль успешно обновлён");
     }
 }
+
