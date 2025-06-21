@@ -1,21 +1,17 @@
 package com.example.backend.controller;
 
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-
-import com.example.backend.DTO.LoginRequest;
-import com.example.backend.DTO.LoginResponse;
-import com.example.backend.DTO.RegisterRequest;
-import com.example.backend.Service.AuthService;
-
+import com.example.backend.dto.LoginRequest;
+import com.example.backend.dto.LoginResponse;
+import com.example.backend.dto.RegisterRequest;
+import com.example.backend.service.AuthService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.view.RedirectView;
 
 @RestController
-@RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
+@RequestMapping("/api/v1/auth")
 public class AuthController {
 
     private final AuthService authService;
@@ -28,5 +24,11 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest request) {
         return ResponseEntity.ok(authService.login(request));
+    }
+
+    // Перенаправление с корня на Swagger UI
+    @GetMapping("/")
+    public RedirectView redirectToSwagger() {
+        return new RedirectView("/swagger-ui/index.html");
     }
 }

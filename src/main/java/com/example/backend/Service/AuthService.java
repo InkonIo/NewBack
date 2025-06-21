@@ -1,12 +1,12 @@
-package com.example.backend.Service;
+package com.example.backend.service;
 
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import com.example.backend.DTO.LoginRequest;
-import com.example.backend.DTO.LoginResponse;
-import com.example.backend.DTO.RegisterRequest;
 import com.example.backend.JWT.JwtService;
+import com.example.backend.dto.LoginRequest;
+import com.example.backend.dto.LoginResponse;
+import com.example.backend.dto.RegisterRequest;
 import com.example.backend.entiity.User;
 import com.example.backend.repository.UserRepository;
 

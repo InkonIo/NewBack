@@ -1,4 +1,4 @@
-package com.example.backend.Service;
+package com.example.backend.service;
 
 import java.util.Optional;
 
