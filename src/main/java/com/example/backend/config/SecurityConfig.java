@@ -41,6 +41,7 @@ public class SecurityConfig {
                     "/swagger-resources/**",
                     "/webjars/**",
                     "/api/v1/auth/**",
+                    "/api/v1/recovery/**",
                     "/",
                     "/error"
                 ).permitAll()
@@ -59,7 +60,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of("https://agrofarm.kz", "https://www.agrofarm.kz"));
+        config.setAllowedOriginPatterns(List.of("*")); // 👈 заменить
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
