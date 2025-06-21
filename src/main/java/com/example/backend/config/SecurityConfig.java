@@ -32,7 +32,7 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
             .csrf().disable()
-            .cors().configurationSource(corsConfigurationSource())
+            .cors().configurationSource(corsConfigurationSource()) // ✅ подключаем CORS
             .and()
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(
@@ -60,16 +60,16 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOriginPatterns(List.of("*")); // 👈 заменить
+        config.setAllowedOrigins(List.of("https://agrofarm.kz")); // ✅ точный домен
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
-        config.setAllowCredentials(true);
+        config.setAllowCredentials(true); // ✅ разрешить cookie и токены
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
         return source;
     }
-    
+
     @Bean
     public AuthenticationProvider authenticationProvider() {
         DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
