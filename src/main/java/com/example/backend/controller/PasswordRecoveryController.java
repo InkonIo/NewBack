@@ -9,8 +9,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/recover")
-@CrossOrigin(origins = "*") // Можно убрать или настроить для продакшена
+@RequestMapping("/api/v1/auth/recovery") // ✅ Исправленный путь
+@CrossOrigin(origins = "*") // Можно настроить конкретные домены на продакшене
 public class PasswordRecoveryController {
 
     @Autowired
