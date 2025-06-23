@@ -20,7 +20,7 @@ public class PasswordRecoveryService {
     private EmailService emailService;
 
     @Autowired
-    private PasswordEncoder passwordEncoder;
+    private PasswordEncoder passwordEncoder; // Инжектируем PasswordEncoder из SecurityConfig
 
     // 1. Отправка кода на email
     public void sendRecoveryCode(String email) {
@@ -33,8 +33,12 @@ public class PasswordRecoveryService {
 
         String code = String.format("%06d", new Random().nextInt(999999));
 
-        user.setResetCode(code);
-        user.setResetCodeExpiry(LocalDateTime.now().plusMinutes(15));
+        // Эти методы требуют, чтобы в классе User были поля
+        // private String resetCode;
+        // private LocalDateTime resetCodeExpiry;
+        // и соответствующие геттеры/сеттеры (генерируемые Lombok @Data или @Setter)
+        user.setResetCode(code); 
+        user.setResetCodeExpiry(LocalDateTime.now().plusMinutes(15)); 
 
         userRepository.save(user);
         emailService.sendResetCode(user.getEmail(), code);
@@ -49,6 +53,10 @@ public class PasswordRecoveryService {
 
         User user = optionalUser.get();
 
+        // Эти методы требуют, чтобы в классе User были поля
+        // private String resetCode;
+        // private LocalDateTime resetCodeExpiry;
+        // и соответствующие геттеры/сеттеры (генерируемые Lombok @Data или @Getter)
         return user.getResetCode() != null &&
                user.getResetCodeExpiry() != null &&
                user.getResetCode().equals(code) &&
@@ -67,6 +75,10 @@ public class PasswordRecoveryService {
         String hashedPassword = passwordEncoder.encode(newPassword);
         user.setPasswordHash(hashedPassword);
 
+        // Эти методы требуют, чтобы в классе User были поля
+        // private String resetCode;
+        // private LocalDateTime resetCodeExpiry;
+        // и соответствующие геттеры/сеттеры (генерируемые Lombok @Data или @Setter)
         user.setResetCode(null);
         user.setResetCodeExpiry(null);
 

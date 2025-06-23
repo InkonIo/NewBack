@@ -8,7 +8,7 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
-import com.example.backend.entiity.User;
+import com.example.backend.entiity.User; // Ваш кастомный User entity
 import com.example.backend.repository.UserRepository;
 
 @Service
@@ -17,7 +17,7 @@ public class UserDetailsServiceImpl implements UserDetailsService {
     @Autowired
     private UserRepository userRepository;
 
-        @Override
+    @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
         Optional<User> userOptional = userRepository.findByEmail(email);
         
@@ -25,12 +25,8 @@ public class UserDetailsServiceImpl implements UserDetailsService {
             throw new UsernameNotFoundException("User not found with email: " + email);
         }
 
-        User user = userOptional.get();
-
-        return org.springframework.security.core.userdetails.User
-                .withUsername(user.getEmail()) // используем email как username
-                .password(user.getPasswordHash())
-                .authorities("USER")
-                .build();
+        // --- ВАЖНОЕ ИЗМЕНЕНИЕ: Теперь возвращаем ваш User entity напрямую ---
+        // Это возможно, потому что ваш User entity теперь реализует UserDetails
+        return userOptional.get(); 
     }
 }
