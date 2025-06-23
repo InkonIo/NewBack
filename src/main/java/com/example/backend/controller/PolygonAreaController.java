@@ -20,7 +20,7 @@ import java.util.UUID;
 public class PolygonAreaController {
 
     private final PolygonAreaRepository polygonRepo;
-    private final UserRepository userRepo; // <--- ДОБАВИЛ
+    private final UserRepository userRepo;
 
     @PostMapping
     public ResponseEntity<?> createPolygon(
@@ -34,7 +34,7 @@ public class PolygonAreaController {
             return ResponseEntity.status(401).body("Authentication required or user not found.");
         }
 
-        // 🔧 ВАЖНО: загружаем пользователя из базы, чтобы он был «attached»
+        // Загружаем пользователя из базы, чтобы он был attached (привязан к сессии)
         User attachedUser = userRepo.findById(user.getId())
                 .orElseThrow(() -> new RuntimeException("Authenticated user not found in database."));
 
@@ -43,7 +43,7 @@ public class PolygonAreaController {
         PolygonArea area = PolygonArea.builder()
                 .id(UUID.randomUUID())
                 .name(dto.getName())
-                .user(attachedUser) // 💡 тут используем связанного юзера
+                .user(attachedUser)
                 .geoJson(dto.getGeoJson())
                 .build();
 

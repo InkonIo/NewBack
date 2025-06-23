@@ -42,6 +42,7 @@ public class SecurityConfig {
                     "/webjars/**",
                     "/api/v1/auth/**",
                     "/api/v1/recovery/**",
+                    "/api/polygons",
                     "/",
                     "/error"
                 ).permitAll()
