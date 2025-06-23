@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import com.example.backend.repository.UserRepository;
+import com.example.backend.entiity.User; // Убедитесь, что импортируете свой класс User
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -38,14 +39,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         final String jwtToken = authHeader.substring(7); // Удаляем "Bearer "
         final String userEmail = jwtService.extractEmail(jwtToken); // Лучше явно назвать метод
 
+        // Проверяем, что email пользователя не null и что пользователь еще не аутентифицирован
         if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            userRepository.findByEmail(userEmail).ifPresent(user -> {
+            userRepository.findByEmail(userEmail).ifPresent(user -> { // Получаем наш объект User
+                // Валидируем токен, используя email пользователя из БД
                 if (jwtService.isTokenValid(jwtToken, user.getEmail())) {
-                    // Здесь можно добавить user.getAuthorities(), если реализованы роли
+                    // --- ВАЖНОЕ ИЗМЕНЕНИЕ: Передаем user.getAuthorities() ---
                     UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                            user, null, null
+                            user, // Principal: наш объект User, который теперь UserDetails
+                            null, // Credentials: не нужны после валидации токена
+                            user.getAuthorities() // Authorities: получаем из нашего объекта User
                     );
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    // Устанавливаем аутентификацию в SecurityContext
                     SecurityContextHolder.getContext().setAuthentication(authToken);
                 }
             });
