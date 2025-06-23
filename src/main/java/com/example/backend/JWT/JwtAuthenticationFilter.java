@@ -9,16 +9,18 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import com.example.backend.repository.UserRepository;
-import com.example.backend.entiity.User; // Убедитесь, что импортируете свой класс User
+import com.example.backend.entiity.User; 
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j; // Добавьте этот импорт для логирования
 
 @Component
 @RequiredArgsConstructor
+@Slf4j // Аннотация Lombok для автоматического создания логгера
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
@@ -30,31 +32,45 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     FilterChain filterChain) throws ServletException, IOException {
 
         final String authHeader = request.getHeader("Authorization");
+        log.info("JWT Filter: Request URL: {}", request.getRequestURI()); // Логгируем URL запроса
 
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            log.warn("JWT Filter: No Bearer token found or Authorization header missing. Proceeding without authentication.");
             filterChain.doFilter(request, response);
             return;
         }
 
-        final String jwtToken = authHeader.substring(7); // Удаляем "Bearer "
-        final String userEmail = jwtService.extractEmail(jwtToken); // Лучше явно назвать метод
+        final String jwtToken = authHeader.substring(7);
+        log.info("JWT Filter: Extracted token: {}", jwtToken);
 
-        // Проверяем, что email пользователя не null и что пользователь еще не аутентифицирован
+        final String userEmail = jwtService.extractEmail(jwtToken);
+        log.info("JWT Filter: Extracted email from token: {}", userEmail);
+
         if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            userRepository.findByEmail(userEmail).ifPresent(user -> { // Получаем наш объект User
-                // Валидируем токен, используя email пользователя из БД
+            log.info("JWT Filter: User email is not null and no existing authentication. Looking up user.");
+            
+            userRepository.findByEmail(userEmail).ifPresentOrElse(user -> { 
+                log.info("JWT Filter: User found in DB: {}", user.getEmail());
                 if (jwtService.isTokenValid(jwtToken, user.getEmail())) {
-                    // --- ВАЖНОЕ ИЗМЕНЕНИЕ: Передаем user.getAuthorities() ---
+                    log.info("JWT Filter: Token is valid for user: {}", user.getEmail());
                     UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                            user, // Principal: наш объект User, который теперь UserDetails
-                            null, // Credentials: не нужны после валидации токена
-                            user.getAuthorities() // Authorities: получаем из нашего объекта User
+                            user, 
+                            null, 
+                            user.getAuthorities() 
                     );
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                    // Устанавливаем аутентификацию в SecurityContext
                     SecurityContextHolder.getContext().setAuthentication(authToken);
+                    log.info("JWT Filter: SecurityContextHolder updated for user: {}", user.getEmail());
+                } else {
+                    log.warn("JWT Filter: Token is NOT valid for user: {}", user.getEmail());
                 }
+            }, () -> {
+                log.warn("JWT Filter: User with email {} NOT found in database.", userEmail);
             });
+        } else if (userEmail == null) {
+            log.warn("JWT Filter: User email extracted from token was NULL. Token might be malformed or invalid.");
+        } else { // SecurityContextHolder.getContext().getAuthentication() != null
+            log.info("JWT Filter: User {} already authenticated. Skipping.", userEmail);
         }
 
         filterChain.doFilter(request, response);
