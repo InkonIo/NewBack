@@ -1,12 +1,11 @@
 // src/main/java/com/example/backend/dto/PolygonRequestDto.java
 package com.example.backend.dto;
 
-import java.util.UUID; // Не забудьте импортировать UUID, если вы используете его как ID
+import lombok.Data; // Убедитесь, что Lombok импортирован
 
-import lombok.Data;
-
-@Data
+@Data // Эта аннотация автоматически генерирует геттеры и сеттеры для всех полей
 public class PolygonRequestDto {
-    private UUID id; // Добавляем ID для использования в PUT запросах, когда ID передается в теле
-    private String geoJson; // Это поле теперь будет содержать GeoJSON Feature с name и crop в properties
+    private String name;    // Должен иметь getName() и setName()
+    private String geoJson; // Должен иметь getGeoJson() и setGeoJson()
+    private String crop;    // Должен иметь getCrop() и setCrop()
 }
