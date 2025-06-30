@@ -44,20 +44,21 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(
                     // Пути, доступные БЕЗ АУТЕНТИКАЦИИ (permitAll)
-                    "/swagger-ui/**",          // Документация Swagger UI
-                    "/v3/api-docs/**",         // OpenAPI спецификация
-                    "/swagger-resources/**",   // Ресурсы Swagger
-                    "/webjars/**",             // Webjars (для Swagger и других)
-                    "/api/v1/auth/**",         // Эндпоинты аутентификации (регистрация, вход)
-                    "/api/v1/recovery/**",     // Эндпоинты восстановления пароля
-                    "/api/polygons",           // Этот путь был в вашем `requestMatchers`. Если `/api/polygons` не требует аутентификации для POST/GET, то оставляем. Если только для зарегистрированных, то удалить.
+                    "/swagger-ui/**",           // Документация Swagger UI
+                    "/v3/api-docs/**",          // OpenAPI спецификация
+                    "/swagger-resources/**",    // Ресурсы Swagger
+                    "/webjars/**",              // Webjars (для Swagger и других)
+                    "/api/v1/auth/**",          // Эндпоинты аутентификации (регистрация, вход)
+                    "/api/v1/recovery/**",      // Эндпоинты восстановления пароля
+                    "/api/polygons",            // Этот путь был в вашем `requestMatchers`. Если `/api/polygons` не требует аутентификации для POST/GET, то оставляем. Если только для зарегистрированных, то удалить.
                     // ✅ ТОЧНЫЙ ПУТЬ К ЭНДПОИНТУ NDVI, который использует фронтенд
                     "/api/v1/indices/ndvi",
                     // ✅ Добавлено для потенциальных вложенных путей или параметров после /ndvi
                     "/api/v1/indices/ndvi/**",
                     "/api/v1/indices/wms-proxy/**",
-                    "/",                       // Корневой путь (например, главная страница)
-                    "/error"                   // Страница ошибок
+                    "/api/v1/indices/masked-index/**", // ✅ Добавлен путь для маскированных изображений
+                    "/",                        // Корневой путь (например, главная страница)
+                    "/error"                    // Страница ошибок
                 ).permitAll() // Разрешаем доступ без аутентификации
                 .anyRequest().authenticated() // Все остальные запросы требуют аутентификации
             )
@@ -84,17 +85,15 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(List.of(
-            "http://localhost:5173", // ✅ Ваш фронтенд на локальном хосте
-            "https://agrofarm.kz",   // ✅ Ваш продакшен-домен
-            "https://www.agrofarm.kz",
-            "https://user.agrofarm.kz",
-            "https://newback-production-aa83.up.railway.app/api/v1/indices/ndvi",
-            "https://newback-production-aa83.up.railway.app/api/v1/wms-proxy/**",
-            "https://newback-production-aa83.up.railway.app/api/v1/indices/**"// ✅ Ваш продакшен-домен с www
+            "http://localhost:5173",            // Ваш фронтенд на локальном хосте
+            "https://agrofarm.kz",              // Ваш продакшен-домен
+            "https://www.agrofarm.kz",          // Ваш продакшен-домен с www
+            "https://user.agrofarm.kz",         // Ваш поддомен для пользователей
+            "https://newback-production-aa83.up.railway.app" // ✅ Сам домен бэкенда, если он является источником для каких-либо запросов (хотя обычно это не нужно для CORS)
         ));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS")); // Разрешенные HTTP методы
         config.setAllowedHeaders(List.of("*")); // Разрешенные заголовки
-        config.setAllowCredentials(true); // ✅ Разрешить отправку куки и заголовков авторизации (например, JWT)
+        config.setAllowCredentials(true); // Разрешить отправку куки и заголовков авторизации (например, JWT)
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config); // Применяем эту CORS-конфигурацию ко всем путям
@@ -110,7 +109,7 @@ public class SecurityConfig {
     public AuthenticationProvider authenticationProvider() {
         DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
         authProvider.setUserDetailsService(userDetailsService); // Используем наш UserDetailsService
-        authProvider.setPasswordEncoder(passwordEncoder());     // Используем наш PasswordEncoder
+        authProvider.setPasswordEncoder(passwordEncoder());      // Используем наш PasswordEncoder
         return authProvider;
     }
 
