@@ -327,20 +327,32 @@ public class SentinelHubService {
 
     /**
      * Общий метод для получения маскированного изображения любого поддерживаемого слоя Sentinel Hub.
-     * @param geoJson Геометрия полигона в формате GeoJSON.
+     * @param geoJson Геометрия полигона в формате GeoJSON (может быть Feature или Polygon).
      * @param layerId Идентификатор слоя для запроса (например, "1_TRUE_COLOR", "3_NDVI").
      * @return Байтовый массив PNG изображения.
      * @throws Exception если произошла ошибка при запросе к Sentinel Hub.
      */
     public byte[] getMaskedImage(String geoJson, String layerId) throws Exception {
         String token = getOrCreateAccessToken();
-        JsonNode geometry = objectMapper.readTree(geoJson);
+        JsonNode parsedGeoJson = objectMapper.readTree(geoJson);
 
+        // ✅ ИЗМЕНЕНО: Проверяем, является ли полученный GeoJSON объектом "Feature"
+        // Если да, извлекаем его "geometry"
+        JsonNode geometryToSend;
+        if (parsedGeoJson.isObject() && parsedGeoJson.has("type") && parsedGeoJson.get("type").asText().equals("Feature") && parsedGeoJson.has("geometry")) {
+            geometryToSend = parsedGeoJson.get("geometry");
+            logger.debug("Извлечена геометрия из GeoJSON Feature для Sentinel Hub.");
+        } else {
+            // Если это уже объект Polygon/MultiPolygon или другой допустимый тип, используем его напрямую
+            geometryToSend = parsedGeoJson;
+            logger.debug("GeoJSON отправляется напрямую в Sentinel Hub (не Feature объект).");
+        }
+        
         String evalscript = generateEvalscript(layerId); // Генерируем evalscript для выбранного слоя
 
         Map<String, Object> requestBody = new HashMap<>();
         requestBody.put("input", Map.of(
-            "bounds", Map.of("geometry", geometry), 
+            "bounds", Map.of("geometry", geometryToSend), // ✅ ИСПОЛЬЗУЕМ geometryToSend
             "data", List.of(Map.of(
                 "type", "sentinel-2-l2a",
                 "dataFilter", Map.of(
@@ -423,11 +435,21 @@ public class SentinelHubService {
         headers.setBearerAuth(accessToken); 
         headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON)); 
 
-        JsonNode geoJsonNode = objectMapper.readTree(geoJsonPolygonString); 
+        JsonNode parsedGeoJson = objectMapper.readTree(geoJsonPolygonString); 
+
+        // ✅ ИЗМЕНЕНО: Аналогичная проверка для метода статистики
+        JsonNode geometryToSend;
+        if (parsedGeoJson.isObject() && parsedGeoJson.has("type") && parsedGeoJson.get("type").asText().equals("Feature") && parsedGeoJson.has("geometry")) {
+            geometryToSend = parsedGeoJson.get("geometry");
+            logger.debug("Извлечена геометрия из GeoJSON Feature для Sentinel Hub статистики.");
+        } else {
+            geometryToSend = parsedGeoJson;
+            logger.debug("GeoJSON отправляется напрямую в Sentinel Hub (не Feature объект) для статистики.");
+        }
 
         Map<String, Object> requestBody = Map.of(
             "input", Map.of(
-                "bounds", Map.of("geometry", geoJsonNode), 
+                "bounds", Map.of("geometry", geometryToSend), // ✅ ИСПОЛЬЗУЕМ geometryToSend
                 "data", List.of(Map.of(
                     "type", "sentinel-2-l2a",
                     "dataFilter", Map.of(
