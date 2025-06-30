@@ -86,7 +86,8 @@ public class SecurityConfig {
         config.setAllowedOrigins(List.of(
             "http://localhost:5173", // ✅ Ваш фронтенд на локальном хосте
             "https://agrofarm.kz",   // ✅ Ваш продакшен-домен
-            "https://www.agrofarm.kz" // ✅ Ваш продакшен-домен с www
+            "https://www.agrofarm.kz",
+            "https://user.agrofarm.kz" // ✅ Ваш продакшен-домен с www
         ));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS")); // Разрешенные HTTP методы
         config.setAllowedHeaders(List.of("*")); // Разрешенные заголовки
