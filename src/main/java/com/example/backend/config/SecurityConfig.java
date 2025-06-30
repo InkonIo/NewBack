@@ -87,7 +87,10 @@ public class SecurityConfig {
             "http://localhost:5173", // ✅ Ваш фронтенд на локальном хосте
             "https://agrofarm.kz",   // ✅ Ваш продакшен-домен
             "https://www.agrofarm.kz",
-            "https://user.agrofarm.kz" // ✅ Ваш продакшен-домен с www
+            "https://user.agrofarm.kz",
+            "https://newback-production-aa83.up.railway.app/api/v1/indices/ndvi",
+            "https://newback-production-aa83.up.railway.app/api/v1/wms-proxy/**",
+            "https://newback-production-aa83.up.railway.app/api/v1/indices/**"// ✅ Ваш продакшен-домен с www
         ));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS")); // Разрешенные HTTP методы
         config.setAllowedHeaders(List.of("*")); // Разрешенные заголовки

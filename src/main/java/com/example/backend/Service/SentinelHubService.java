@@ -357,10 +357,13 @@ public class SentinelHubService {
                 "type", "sentinel-2-l2a",
                 "dataFilter", Map.of(
                     "timeRange", Map.of(
-                        "from", "2023-01-01T00:00:00Z", 
+                        // ✅ ИЗМЕНЕНО: Расширяем временной диапазон для поиска безоблачных снимков
+                        "from", "2020-01-01T00:00:00Z", 
                         "to", "2024-12-31T23:59:59Z"
                     ),
-                    "maxCloudCoverage", 1.0 // ✅ ИЗМЕНЕНО: Увеличено до 100% для теста
+                    // ✅ maxCloudCoverage уже 0.0, что является самым строгим фильтром.
+                    // Если облака все еще видны, значит, нет полностью безоблачных снимков за этот период.
+                    "maxCloudCoverage", 0.0 
                 )
             ))
         ));
@@ -457,7 +460,8 @@ public class SentinelHubService {
                             "from", fromDate.atStartOfDay().toString() + "Z",
                             "to", toDate.atTime(23, 59, 59).toString() + "Z"
                         ),
-                        "maxCloudCoverage", 0.8 // Также расширим для статистики
+                        // ✅ maxCloudCoverage уже 0.0, что является самым строгим фильтром.
+                        "maxCloudCoverage", 0.0 
                     )
                 ))
             ),
