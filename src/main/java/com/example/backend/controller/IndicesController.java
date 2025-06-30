@@ -5,10 +5,13 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap; // Импорт для кэша
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.CacheControl; // Импорт для CacheControl
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -16,9 +19,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.ByteArrayHttpMessageConverter;
-import org.springframework.stereotype.Service;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
+import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -32,32 +33,24 @@ import org.springframework.web.client.RestTemplate;
 import com.example.backend.entiity.PolygonArea;
 import com.example.backend.service.PolygonAreaService;
 import com.example.backend.service.SentinelHubService;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
-import java.util.concurrent.TimeUnit; // Импорт для TimeUnit
 
 @RestController
 @RequestMapping("/api/v1/indices")
+@CrossOrigin(origins = "*") // Для CORS
 public class IndicesController {
+
+    private static final Logger logger = LoggerFactory.getLogger(IndicesController.class);
 
     private final PolygonAreaService polygonAreaService;
     private final SentinelHubService sentinelHubService;
     private final RestTemplate restTemplate;
 
-    @Value("${sentinelhub.auth.url}")
-    private String authUrl;
+    @Value("${sentinelhub.wms.instance.id}")
+    private String wmsInstanceId;
 
-    @Value("${sentinelhub.process.url}")
-    private String processUrl;
+    private static final long TILE_CACHE_EXPIRY_SECONDS = 300;
 
-    @Value("${sentinelhub.client.id}")
-    private String clientId;
-
-    @Value("${sentinelhub.client.secret}")
-    private String clientSecret;
-
-    // ✅ НОВЫЙ ВНУТРЕННИЙ КЛАСС ДЛЯ ЭЛЕМЕНТОВ КЭША
     private static class CachedTile {
         private final byte[] data;
         private final MediaType contentType;
@@ -66,7 +59,11 @@ public class IndicesController {
         public CachedTile(byte[] data, MediaType contentType, long expiryDurationSeconds) {
             this.data = data;
             this.contentType = contentType;
-            this.expiryTimeMillis = System.currentTimeMillis() + (expiryDurationSeconds * 1000);
+            this.expiryTimeMillis = System.currentTimeMillis() + expiryDurationSeconds * 1000;
+        }
+
+        public boolean isExpired() {
+            return System.currentTimeMillis() >= expiryTimeMillis;
         }
 
         public byte[] getData() {
@@ -76,175 +73,201 @@ public class IndicesController {
         public MediaType getContentType() {
             return contentType;
         }
-
-        public boolean isExpired() {
-            return System.currentTimeMillis() >= expiryTimeMillis;
-        }
     }
 
-    // ✅ КЭШ ДЛЯ WMS-ТАЙЛОВ
     private final Map<String, CachedTile> wmsTileCache = new ConcurrentHashMap<>();
-    private static final long TILE_CACHE_EXPIRY_SECONDS = 300; // Кэшировать тайлы на 5 минут
 
-    public IndicesController(PolygonAreaService polygonAreaService, SentinelHubService sentinelHubService, RestTemplate restTemplate, ObjectMapper objectMapper) {
+    public IndicesController(PolygonAreaService polygonAreaService,
+                             SentinelHubService sentinelHubService,
+                             RestTemplate restTemplate,
+                             ObjectMapper objectMapper) {
         this.polygonAreaService = polygonAreaService;
         this.sentinelHubService = sentinelHubService;
         this.restTemplate = restTemplate;
-        if (!restTemplate.getMessageConverters().stream().anyMatch(converter -> converter instanceof ByteArrayHttpMessageConverter)) {
+
+        // Убедимся, что RestTemplate может обрабатывать byte[]
+        if (restTemplate.getMessageConverters().stream()
+                .noneMatch(converter -> converter instanceof ByteArrayHttpMessageConverter)) {
             restTemplate.getMessageConverters().add(new ByteArrayHttpMessageConverter());
-            System.out.println("ByteArrayHttpMessageConverter added to RestTemplate.");
         }
     }
 
-    @GetMapping("/ndvi/{polygonId}")
+    @GetMapping("/ndvi/{polygonId}") // Этот эндпоинт остается для статистики NDVI
     public ResponseEntity<?> getNdvIForPolygon(@PathVariable String polygonId) {
         UUID uuid;
         try {
             uuid = UUID.fromString(polygonId);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(400).body(Map.of("message", "Неверный формат ID полигона. Должен быть действительный UUID."));
+            return ResponseEntity.badRequest().body(Map.of("message", "Неверный формат UUID."));
         }
 
         Optional<PolygonArea> optionalPolygon;
         try {
             optionalPolygon = polygonAreaService.getPolygonByIdForCurrentUser(uuid);
         } catch (SecurityException e) {
-            return ResponseEntity.status(403).body(Map.of("message", "Доступ запрещен. " + e.getMessage()));
+            return ResponseEntity.status(403).body(Map.of("message", e.getMessage()));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(404).body(Map.of("message", e.getMessage()));
         }
 
         if (optionalPolygon.isEmpty()) {
-            return ResponseEntity.status(404).body(Map.of("message", "Полигон не найден с ID: " + polygonId));
+            return ResponseEntity.status(404).body(Map.of("message", "Полигон не найден."));
         }
 
-        PolygonArea polygon = optionalPolygon.get();
-        String geoJsonString = polygon.getGeoJson();
-
-        if (geoJsonString == null || geoJsonString.isEmpty()) {
-            return ResponseEntity.status(400).body(Map.of("message", "Отсутствуют данные GeoJSON для полигона с ID: " + polygonId));
+        String geoJson = optionalPolygon.get().getGeoJson();
+        if (geoJson == null || geoJson.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "GeoJSON пуст."));
         }
 
         try {
-            LocalDate toDate = LocalDate.now();
-            LocalDate fromDate = toDate.minusDays(30);
+            LocalDate to = LocalDate.now();
+            LocalDate from = to.minusDays(30);
 
-            Double ndviMean = sentinelHubService.getNdvIStatistics(geoJsonString, fromDate, toDate);
+            Double ndvi = sentinelHubService.getNdvIStatistics(geoJson, from, to);
+            String interpretation = interpretNdvi(ndvi);
 
-            String interpretation;
-            if (ndviMean == null) {
-                interpretation = "Не удалось получить значение NDVI. Пожалуйста, попробуйте еще раз. Возможно, нет чистых изображений для выбранного периода или координат.";
-            } else if (ndviMean > 0.4) {
-                interpretation = "На этом участке NDVI (Normalized Difference Vegetation Index) равен " + String.format("%.3f", ndviMean) + ", что указывает на хорошее состояние растительности. 🌿";
-            } else if (ndviMean > 0.2) {
-                interpretation = "На этом участке NDVI (Normalized Difference Vegetation Index) равен " + String.format("%.3f", ndviMean) + ", что говорит об умеренном состоянии растительности. 🌾";
-            } else if (ndviMean >= 0) {
-                interpretation = "На этом участке NDVI (Normalized Difference Vegetation Index) равен " + String.format("%.3f", ndviMean) + ", что указывает на скудную растительность или её отсутствие. 🍂";
-            } else {
-                interpretation = "На этом участке NDVI (Normalized Difference Vegetation Index) равен " + String.format("%.3f", ndviMean) + ", что, скорее всего, указывает на воду, снег, облака или нерастительные объекты. 💧";
-            }
-
-            return ResponseEntity.ok(Map.of("ndviValue", ndviMean, "interpretation", interpretation));
-
+            return ResponseEntity.ok(Map.of(
+                    "ndviValue", ndvi,
+                    "interpretation", interpretation
+            ));
         } catch (Exception e) {
-            System.err.println("Ошибка получения NDVI для полигона ID " + polygonId + ": " + e.getMessage());
-            e.printStackTrace();
-            return ResponseEntity.status(500).body(Map.of("message", "Не удалось получить данные NDVI: " + e.getMessage()));
+            logger.error("Ошибка при получении NDVI для полигона {}: {}", polygonId, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("message", "Ошибка при получении NDVI: " + e.getMessage()));
         }
     }
 
-    @PostMapping("/ndvi")
+    private String interpretNdvi(Double ndvi) {
+        if (ndvi == null) {
+            return "Не удалось получить значение NDVI.";
+        } else if (ndvi > 0.4) {
+            return String.format("NDVI: %.3f — высокая растительность 🌿", ndvi);
+        } else if (ndvi > 0.2) {
+            return String.format("NDVI: %.3f — умеренная растительность 🌾", ndvi);
+        } else if (ndvi >= 0) {
+            return String.format("NDVI: %.3f — низкая растительность 🍂", ndvi);
+        } else {
+            return String.format("NDVI: %.3f — вода, снег или объекты 💧", ndvi);
+        }
+    }
+
+    @PostMapping("/ndvi") // Этот эндпоинт остается для статистики NDVI по координатам
     public ResponseEntity<?> getNdvIForCoordinates(@RequestBody Map<String, Double> coords) {
         Double lat = coords.get("lat");
         Double lon = coords.get("lon");
 
         if (lat == null || lon == null) {
-            return ResponseEntity.status(400).body(Map.of("error", "Требуются широта и долгота."));
+            return ResponseEntity.badRequest().body(Map.of("error", "Требуются координаты: lat и lon."));
         }
 
         try {
-            return ResponseEntity.ok(Map.of("ndvi", (Math.random() * 2 - 1)));
+            // В реальном приложении здесь можно вызвать SentinelHubService для получения NDVI точки,
+            // используя Process API с очень маленьким bbox вокруг точки.
+            return ResponseEntity.ok(Map.of("ndvi", (Math.random() * 2 - 1))); // Пока заглушка
         } catch (Exception e) {
-            System.err.println("Ошибка получения NDVI для координат " + lat + ", " + lon + ": " + e.getMessage());
-            e.printStackTrace();
-            return ResponseEntity.status(500).body(Map.of("error", "Не удалось получить данные NDVI для точки: " + e.getMessage()));
+            logger.error("Ошибка получения NDVI для координат ({}, {}): {}", lat, lon, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", "Ошибка получения NDVI для координат."));
+        }
+    }
+
+    // ✅ НОВЫЙ ЭНДПОИНТ: для получения маскированного изображения любого индекса
+    @GetMapping("/masked-index/{polygonId}/{layerId}")
+    public ResponseEntity<byte[]> getMaskedIndexImage(@PathVariable String polygonId, @PathVariable String layerId) {
+        UUID uuid;
+        try {
+            uuid = UUID.fromString(polygonId);
+        } catch (IllegalArgumentException e) {
+            logger.error("Неверный формат UUID для маскированного изображения: {}", polygonId);
+            return ResponseEntity.badRequest().build();
+        }
+
+        Optional<PolygonArea> optionalPolygon;
+        try {
+            optionalPolygon = polygonAreaService.getPolygonByIdForCurrentUser(uuid);
+        } catch (SecurityException e) {
+            logger.error("Ошибка безопасности при получении полигона {}: {}", polygonId, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        } catch (IllegalArgumentException e) {
+            logger.error("Полигон {} не найден: {}", polygonId, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+
+        if (optionalPolygon.isEmpty()) {
+            logger.warn("Полигон {} не найден для текущего пользователя для маскированного изображения слоя {}.", polygonId, layerId);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+
+        try {
+            // Используем новый универсальный метод
+            byte[] image = sentinelHubService.getMaskedImage(optionalPolygon.get().getGeoJson(), layerId);
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.IMAGE_PNG);
+            return new ResponseEntity<>(image, headers, HttpStatus.OK);
+        } catch (IllegalArgumentException e) {
+            logger.error("Неподдерживаемый Layer ID для маскированного изображения {}: {}", layerId, e.getMessage());
+            return ResponseEntity.badRequest().body(e.getMessage().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            logger.error("Ошибка при получении маскированного изображения слоя {} для полигона {}: {}", layerId, polygonId, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 
     @GetMapping("/wms-proxy/{instanceId}")
-    public ResponseEntity<byte[]> proxyWms(@PathVariable String instanceId, @RequestParam Map<String, String> allRequestParams) {
-        if (!instanceId.equals("f15c44d0-bbb8-4c66-b94e-6a8c7ab39349")) {
-            System.err.println("WMS Proxy: Неверный instanceId: " + instanceId);
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(null);
+    public ResponseEntity<byte[]> proxyWms(@PathVariable String instanceId,
+                                           @RequestParam Map<String, String> allRequestParams) {
+        if (!instanceId.equals(wmsInstanceId)) {
+            String errorMessage = "Неверный Instance ID в запросе. Ожидается: " + wmsInstanceId + ", Получено: " + instanceId;
+            logger.error(errorMessage);
+            return ResponseEntity.badRequest().body(errorMessage.getBytes(java.nio.charset.StandardCharsets.UTF_8));
         }
 
-        String sentinelHubWmsBaseUrl = "https://services.sentinel-hub.com/ogc/wms/" + instanceId;
+        String baseUrl = "https://services.sentinel-hub.com/ogc/wms/" + wmsInstanceId;
+        // Строим полный URL для запроса к Sentinel Hub WMS
+        String fullUrl = baseUrl + "?" + allRequestParams.entrySet().stream()
+                .map(entry -> entry.getKey() + "=" + entry.getValue())
+                .reduce((a, b) -> a + "&" + b)
+                .orElse("");
 
-        StringBuilder paramsBuilder = new StringBuilder();
-        allRequestParams.forEach((key, value) -> {
-            paramsBuilder.append(key).append("=").append(value).append("&");
-        });
-        if (paramsBuilder.length() > 0) {
-            paramsBuilder.deleteCharAt(paramsBuilder.length() - 1);
-        }
-
-        String fullSentinelHubUrl = sentinelHubWmsBaseUrl + "?" + paramsBuilder.toString();
-        System.out.println("WMS Proxy: Перенаправляем запрос к Sentinel Hub: " + fullSentinelHubUrl);
-
-        // ✅ ПОПЫТКА ПОЛУЧИТЬ ИЗ КЭША
-        CachedTile cachedTile = wmsTileCache.get(fullSentinelHubUrl);
-        if (cachedTile != null && !cachedTile.isExpired()) {
-            System.out.println("WMS Proxy: Возвращаем тайл из кэша для URL: " + fullSentinelHubUrl);
+        // Проверка кэша
+        CachedTile cached = wmsTileCache.get(fullUrl);
+        if (cached != null && !cached.isExpired()) {
             HttpHeaders cachedHeaders = new HttpHeaders();
-            cachedHeaders.setContentType(cachedTile.getContentType());
-            cachedHeaders.setAccessControlAllowOrigin("http://localhost:5173");
-            // Добавляем Cache-Control для браузерного кэширования
+            cachedHeaders.setContentType(cached.getContentType());
             cachedHeaders.setCacheControl(CacheControl.maxAge(TILE_CACHE_EXPIRY_SECONDS, TimeUnit.SECONDS).cachePublic());
-            return new ResponseEntity<>(cachedTile.getData(), cachedHeaders, HttpStatus.OK);
+            return new ResponseEntity<>(cached.getData(), cachedHeaders, HttpStatus.OK);
         }
 
         try {
             HttpHeaders headers = new HttpHeaders();
-            headers.setAccept(Collections.singletonList(MediaType.IMAGE_PNG));
+            headers.setAccept(Collections.singletonList(MediaType.IMAGE_PNG)); // WMS обычно возвращает PNG/JPEG
 
             HttpEntity<Void> entity = new HttpEntity<>(headers);
 
+            logger.info("Отправка WMS запроса в Sentinel Hub: {}", fullUrl); // Логируем полный URL запроса
             ResponseEntity<byte[]> response = restTemplate.exchange(
-                fullSentinelHubUrl,
-                HttpMethod.GET,
-                entity,
-                byte[].class
+                fullUrl, HttpMethod.GET, entity, byte[].class
             );
 
-            System.out.println("WMS Proxy: Получен ответ от Sentinel Hub. Статус: " + response.getStatusCode());
-
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                // ✅ СОХРАНЯЕМ В КЭШ
-                CachedTile newCachedTile = new CachedTile(response.getBody(), response.getHeaders().getContentType(), TILE_CACHE_EXPIRY_SECONDS);
-                wmsTileCache.put(fullSentinelHubUrl, newCachedTile);
-                System.out.println("WMS Proxy: Сохранили тайл в кэш для URL: " + fullSentinelHubUrl);
-
-                HttpHeaders responseHeaders = new HttpHeaders();
-                responseHeaders.setContentType(MediaType.IMAGE_PNG);
-                responseHeaders.setAccessControlAllowOrigin("http://localhost:5173");
-                // ✅ ДОБАВЛЯЕМ Cache-Control ДЛЯ БРАУЗЕРНОГО КЭШИРОВАНИЯ
-                responseHeaders.setCacheControl(CacheControl.maxAge(TILE_CACHE_EXPIRY_SECONDS, TimeUnit.SECONDS).cachePublic());
-
-                return new ResponseEntity<>(response.getBody(), responseHeaders, HttpStatus.OK);
+                logger.info("Успешно получен WMS ответ от Sentinel Hub. Размер: {} байт.", response.getBody().length);
+                wmsTileCache.put(fullUrl, new CachedTile(response.getBody(), MediaType.IMAGE_PNG, TILE_CACHE_EXPIRY_SECONDS));
+                HttpHeaders respHeaders = new HttpHeaders();
+                respHeaders.setContentType(MediaType.IMAGE_PNG);
+                respHeaders.setCacheControl(CacheControl.maxAge(TILE_CACHE_EXPIRY_SECONDS, TimeUnit.SECONDS).cachePublic());
+                return new ResponseEntity<>(response.getBody(), respHeaders, HttpStatus.OK);
             } else {
-                String errorBody = response.getBody() != null ? new String(response.getBody()) : "No body";
-                System.err.println("WMS Proxy: Не удалось проксировать WMS-запрос. Статус: " + response.getStatusCode() + ". Тело ответа: " + errorBody);
-                return ResponseEntity.status(response.getStatusCode()).body(null);
+                logger.error("Получен неуспешный WMS ответ от Sentinel Hub: Статус {}", response.getStatusCode());
+                return ResponseEntity.status(response.getStatusCode()).build();
             }
 
         } catch (HttpClientErrorException e) {
-            System.err.println("WMS Proxy: Ошибка HTTP-клиента при запросе к Sentinel Hub: " + e.getStatusCode() + " - " + e.getResponseBodyAsString());
-            e.printStackTrace();
-            return ResponseEntity.status(e.getStatusCode()).body(e.getResponseBodyAsByteArray());
+            // ✅ ИСПРАВЛЕНО: Добавлен null-check для getResponseBodyAsByteArray()
+            String errorResponseBody = (e.getResponseBodyAsByteArray() != null) ? new String(e.getResponseBodyAsByteArray(), java.nio.charset.StandardCharsets.UTF_8) : "No response body";
+            logger.error("HTTP client error при запросе WMS к Sentinel Hub: Статус {} - {}", e.getStatusCode(), errorResponseBody);
+            // Возвращаем byte[] из тела ошибки, если оно есть, иначе - пустое тело
+            return ResponseEntity.status(e.getStatusCode()).body((e.getResponseBodyAsByteArray() != null) ? e.getResponseBodyAsByteArray() : new byte[0]);
         } catch (Exception e) {
-            System.err.println("WMS Proxy: Критическая ошибка во время WMS прокси-запроса: " + e.getMessage());
-            e.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+            logger.error("Непредвиденная ошибка при проксировании WMS запроса: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 }
