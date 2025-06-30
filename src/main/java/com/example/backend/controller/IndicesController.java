@@ -206,8 +206,10 @@ public class IndicesController {
             logger.error("Неподдерживаемый Layer ID для маскированного изображения {}: {}", layerId, e.getMessage());
             return ResponseEntity.badRequest().body(e.getMessage().getBytes(java.nio.charset.StandardCharsets.UTF_8));
         } catch (Exception e) {
+            // ✅ ИСПРАВЛЕНО: Логируем полную трассировку стека и возвращаем детальное сообщение
             logger.error("Ошибка при получении маскированного изображения слоя {} для полигона {}: {}", layerId, polygonId, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            String errorMessage = "Ошибка при получении маскированного изображения: " + e.getMessage();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorMessage.getBytes(java.nio.charset.StandardCharsets.UTF_8));
         }
     }
 
@@ -260,10 +262,8 @@ public class IndicesController {
             }
 
         } catch (HttpClientErrorException e) {
-            // ✅ ИСПРАВЛЕНО: Добавлен null-check для getResponseBodyAsByteArray()
             String errorResponseBody = (e.getResponseBodyAsByteArray() != null) ? new String(e.getResponseBodyAsByteArray(), java.nio.charset.StandardCharsets.UTF_8) : "No response body";
             logger.error("HTTP client error при запросе WMS к Sentinel Hub: Статус {} - {}", e.getStatusCode(), errorResponseBody);
-            // Возвращаем byte[] из тела ошибки, если оно есть, иначе - пустое тело
             return ResponseEntity.status(e.getStatusCode()).body((e.getResponseBodyAsByteArray() != null) ? e.getResponseBodyAsByteArray() : new byte[0]);
         } catch (Exception e) {
             logger.error("Непредвиденная ошибка при проксировании WMS запроса: {}", e.getMessage(), e);
