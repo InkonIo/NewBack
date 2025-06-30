@@ -404,8 +404,10 @@ public class SentinelHubService {
                 throw new RuntimeException("Failed to fetch masked image for layer " + layerId + " from Sentinel Hub: " + response.getStatusCode() + " - " + errorResponseBody);
             }
         } catch (HttpClientErrorException e) {
-            logger.error("HTTP client error when fetching masked image for layer {} from Sentinel Hub: Status {} - {}", layerId, e.getStatusCode(), e.getResponseBodyAsString());
-            throw new RuntimeException("HTTP client error when fetching masked image for layer " + layerId + " from Sentinel Hub: " + e.getStatusCode() + " - " + e.getResponseBodyAsString(), e);
+            // ✅ ИЗМЕНЕНО: Более детальное логирование ошибки HttpClientErrorException
+            String errorResponse = e.getResponseBodyAsString();
+            logger.error("HTTP client error when fetching masked image for layer {} from Sentinel Hub: Status {} - Response Body: {}", layerId, e.getStatusCode(), errorResponse);
+            throw new RuntimeException("HTTP client error when fetching masked image for layer " + layerId + " from Sentinel Hub: " + e.getStatusCode() + " - " + errorResponse, e);
         } catch (Exception e) {
             logger.error("Ошибка при выполнении запроса к Sentinel Hub Process API для слоя {}: {}", layerId, e.getMessage(), e);
             throw new RuntimeException("Error while fetching masked image for layer " + layerId + " from Sentinel Hub: " + e.getMessage(), e);
